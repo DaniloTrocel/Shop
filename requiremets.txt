@@ -2,3 +2,6 @@ django==4.2
 Pillow
 mysqlclient
 django-admin-interface
+django-crispy-forms
+crispy-bootstrap4
+django-paypal

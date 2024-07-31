@@ -11,6 +11,7 @@ https://docs.djangoproject.com/en/4.2/ref/settings/
 """
 
 from pathlib import Path
+from decouple import config
 import os
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -42,7 +43,8 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'web',
     'crispy_forms',
-    'crispy_bootstrap4',  # Agrega esta línea
+    'crispy_bootstrap4',  
+    'paypal.standard.ipn',
 ]
 
 X_FRAME_OPTIONS = "SAMEORIGIN"
@@ -140,3 +142,13 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 MEDIA_URL = '/media/'
+
+PAYPAL_TEST = True
+PAYPAL_USER_EMAIL = config('PAYPAL_USER_EMAIL')
+
+EMAIL_HOST = 'sandbox.smtp.mailtrap.io'
+EMAIL_HOST_USER = '879b2b070cc8cf'
+EMAIL_HOST_PASSWORD = 'b0f57101ae45cb'
+EMAIL_PORT = '2525'
+
+ADMIN_USER_EMAIL= config('ADMIN_USER_EMAIL')

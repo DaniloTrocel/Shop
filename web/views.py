@@ -1,14 +1,21 @@
 from django.shortcuts import render, get_object_or_404, redirect
 
-from .models import Categoria, Producto, Cliente
+from .models import Categoria, Producto, Cliente, Pedido, PedidoDetalle
 
 from .carrito import Cart
 
 from django.contrib.auth.models import User
 from django.contrib.auth import authenticate, login, logout
 
+from paypal.standard.forms import PayPalPaymentsForm
+
 from .forms import ClienteForm
 from django.contrib.auth.decorators import login_required
+from django.urls import reverse
+
+from django.core.mail import send_mail
+
+from django.conf import settings
 
 # Create your views here.
 """ VISTAS PARA EL  CATALOGO DE PRODUCTOS """
@@ -232,3 +239,104 @@ def registrarPedido(request):
     }
 
     return render(request, 'pedido.html', context)
+
+@login_required(login_url='/login')
+def confirmarPedido(request):
+    context ={}
+
+    if request.method == 'POST':
+        
+        #actualizar usuario
+        actUsuario = User.objects.get(pk=request.user.id)
+        actUsuario.first_name = request.POST['nombre']
+        actUsuario.last_name = request.POST['apellidos']
+        actUsuario.save()
+        #registramos o actualizamos cliente
+        try:
+            clientePedido = Cliente.objects.get(usuario=request.user)
+            clientePedido.telefono = request.POST['telefono']
+            clientePedido.direccion = request.POST['direccion']
+            clientePedido.save()
+        except:
+            clientePedido = Cliente()
+            clientePedido.usuario = actUsuario
+            clientePedido.telefono = request.POST['telefono']
+            clientePedido.direccion = request.POST['direccion']
+            clientePedido.save()    
+        #registramos nuevo pedido
+        nroPedido = ''
+        montoTotal = float(request.session.get('cartMontoTotal'))
+        nuevoPedido = Pedido()
+        nuevoPedido.cliente = clientePedido
+        nuevoPedido.save()
+
+        #registramos el detalle del pedido
+        carritoPedido = request.session.get('cart')
+        for key,value in carritoPedido.items():
+            productoPedido = Producto.objects.get(pk=value['producto_id'])
+            detallePedido = PedidoDetalle()
+            detallePedido.pedido = nuevoPedido
+            detallePedido.producto = productoPedido
+            detallePedido.cantidad = int(value['cantidad'])
+            detallePedido.subtotal = float(value['subtotal'])
+            detallePedido.save()
+
+        #registrar variable de sesion para el pedido
+        request.session['pedido_id'] = nuevoPedido.id    
+
+        #actualizar pedido
+        nroPedido = 'PED' + nuevoPedido.fecha_registro.strftime('%Y') + str(nuevoPedido.id)
+        nuevoPedido.nro_pedido = nroPedido
+        nuevoPedido.monto_total = montoTotal
+        nuevoPedido.save()
+
+        #creacion del boton de paypal
+        paypal_dict = {
+        "business": settings.PAYPAL_USER_EMAIL,
+        "amount": montoTotal,
+        "item_name": "PEDIDO CODIGO: " + nroPedido,
+        "invoice": nroPedido,
+        "notify_url": request.build_absolute_uri(reverse('paypal-ipn')),
+        "return_url": request.build_absolute_uri(reverse('/gracias')),
+        "cancel_return": request.build_absolute_uri(reverse('/'))
+    }    
+        #create the instance
+        formPaypal = PayPalPaymentsForm(initial=paypal_dict)
+
+        context = {
+            'pedido': nuevoPedido,
+            'formPaypal': formPaypal
+        }
+        
+        #limpiar carrito de compras
+        carrito = Cart(request)
+        carrito.clear()
+
+    return render(request, 'pedido.html',context)
+
+@login_required(login_url='/login')
+def gracias(request):
+    paypalId = request.GET.get('PayerID', None)
+    context ={}
+    if paypalId is not None:
+        pedidoId = request.session.get('pedidoId')
+        pedido = pedido.objects.get(pk=pedidoId)
+        pedido.estado = '1'
+        pedido.save()
+
+        send_mail(
+            'GRACIAS POR TU COMPRA',
+            'Tu nro de pedido es' + pedido.nro_pedido,
+            settings.ADMIN_USER_EMAIL,
+            [request.user.email],
+            fail_silently=False
+        )
+
+        context = {
+            'pedido': pedido
+        }
+    else:
+        return redirect('/')
+
+    return render(request, 'gracias.html', context)
+    
